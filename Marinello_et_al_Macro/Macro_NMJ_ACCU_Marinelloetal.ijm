@@ -1,4 +1,4 @@
-
+requires("1.53f");
 //MAIN CODE
 // Choice of Image Type
 //Get Images Directory and number of junction folders
@@ -66,10 +66,10 @@ for (i = 0; i < Nbj ; i++)
 	else 
 		{	
 		ListImJcn=getFileList(Imdir+jctn[i]);	
-		Junction=Imdir+jctn[i]+ListImJcn[0];	
-		run("Image Sequence...", "open=[Junction] sort");
+		Junction=Imdir+jctn[i];	
+		run("Image Sequence...", "dir="+Junction+" sort");
 		run("Set Scale...", "distance=1 known="+xypix+" pixel=1 unit=um");
-		extractChannel_RGB(chan_presyn,chan_postsyn);
+		extractChannel_RGB(chan_presyn,chan_postsyn);		
 		}
 
 
@@ -77,52 +77,60 @@ for (i = 0; i < Nbj ; i++)
 	rename(presyn);
 	selectWindow("stack_postsyn");
 	rename(postsyn);
-	
+
+
 
 //----------------------------------------------------------------------
 
-selectWindow(postsyn);
+	selectWindow(postsyn);
 	run("Z Project...", "projection=[Max Intensity]");
 	selectWindow("MAX_"+postsyn);
-	setAutoThreshold("Yen dark");
+	setAutoThreshold("Huang");
 	setOption("BlackBackground", false);
 	run("Convert to Mask");
+	run("Invert");
 	run("Median...", "radius=2");
-
-	
-	run("Analyze Particles...", "size=20-1000 add");
+	roiManager("reset");
+	run("Analyze Particles...", "size=2-1000 add");
+	combineroi();
 	selectWindow(postsyn);
 	roiManager("Select", 0);
 	run("Crop");
 	rename(postsyn);
 	run("Select None");
+	
 	roiManager("reset");
 
 
 	selectWindow("MAX_"+postsyn);
 	run("Select None");
-	run("Analyze Particles...", "size=20-1000  add");
+	run("Analyze Particles...", "size=2-1000  add");
+	combineroi();
 	selectWindow(presyn);
 	roiManager("select", 0);
 	run("Crop");
 	rename(presyn);
 	run("Select None");
-	roiManager("reset");
 
+	roiManager("reset");
 	selectWindow("MAX_"+postsyn);
 	run("Select None");
-	run("Analyze Particles...", "size=20-1000  add");
-	
+	run("Analyze Particles...", "size=2-1000  add");
+	combineroi();
 	selectWindow("stackMax");
 	run("Z Project...", "projection=[Max Intensity]");
 	selectWindow("MAX_stackMax");
 	roiManager("select", 0);
 	run("Crop");
-	saveAs("Tiff", pathsave + "Maxproj_crop_jonction"+j+".tif");
-	close();
 	
-	
-	
+	pathjctn=pathsave+jctn[i];
+	File.makeDirectory(pathjctn);
+
+	saveAs("Tiff", pathjctn + "Maxproj_crop_jonction"+j+".tif");
+	selectWindow("Maxproj_crop_jonction"+j+".tif");
+	run("Close");
+
+
 	// Positionning in the middle of bungarotoxin stack for thresholding
 	selectWindow(postsyn);
 	Midslice=nSlices/2+1;
@@ -130,17 +138,20 @@ selectWindow(postsyn);
 
 	//Otsu Thresholding
 	setAutoThreshold("Otsu");
+	//getThreshold(lower,upper);
+	//up1=upper;
 	setOption("BlackBackground", false);
 	run("Convert to Mask", "method=Otsu background=Dark");
 	run("Invert","stack");
 	run("Dilate","stack");
 	//Analysis of detected surfaces
+	run("Set Measurements...", "area mean redirect=None decimal=3");
 	run("Analyze Particles...", "size=20-Infinity pixel show=[Bare Outlines] display exclude stack");
 	//Saving the detected surfaces contour
 	selectWindow("Drawing of "+postsyn);
-	saveAs("Tiff", pathsave + "Drawing_" + postsyn + "_junction" +j+".tif");
+	saveAs("Tiff", pathjctn + "Drawing_" + postsyn + "_junction" +j+".tif");
 	selectWindow("Drawing_"+postsyn+"_junction"+j+".tif");
-	close();
+	run("Close");
 	
 	// Summing all the surface area of detected surfaces = Volume of bungatoxin staining
 		n=getValue("results.count");
@@ -152,7 +163,8 @@ selectWindow(postsyn);
 			a=post;
 			}
 	selectWindow("Results");
-	saveAs("Results", pathsave + "Results_Volume_" + postsyn + "_junction" + j + ".csv");
+	saveAs("Results", pathjctn + "Results_Volume_" + postsyn + "_junction" + j + ".csv");
+	selectWindow("Results");
 	run("Close");
 	
 	
@@ -161,20 +173,26 @@ selectWindow(postsyn);
 	setSlice(Midslice);
 
 	//Otsu Thresholding
-	setAutoThreshold("Otsu");
-	setOption("BlackBackground", false);
-	run("Convert to Mask", "method=Otsu background=Dark");
-	run("Invert","stack");
-	run("Dilate","stack");
-	//Analysis of detected surfaces
-	run("Analyze Particles...", "size=20-Infinity pixel show=[Bare Outlines] display exclude stack");
-	//Saving the detected surfaces contour
-	selectWindow("Drawing of "+presyn);
-	saveAs("Tiff", pathsave + "Drawing_"+presyn+"_junction" +j+".tif");
-	selectWindow("Drawing_"+presyn+"_junction"+j+".tif");
-	close();
+		setAutoThreshold("Otsu");
+		getThreshold(lower,upper);
+		T=maxOf(upper,15);
+		setThreshold(0, T);
+		setOption("BlackBackground", false);
+		run("Convert to Mask","background=Light");
+		run("Invert","stack");
+		run("Dilate","stack");
+		//Analysis of detected surfaces
+		run("Analyze Particles...", "size=20-Infinity pixel show=[Bare Outlines] display exclude stack");
+		//Saving the detected surfaces contour
+		selectWindow("Drawing of "+presyn);
+		saveAs("Tiff", pathjctn + "Drawing_"+presyn+"_junction" +j+".tif");
+		selectWindow("Drawing_"+presyn+"_junction"+j+".tif");
+		run("Close");
 	
 	// Summing all the surface area of detected surfaces = Volume of NF staining
+	Res=isOpen("Results");
+	if (Res==1) 
+	{
 	selectWindow("Results");
 		n=getValue("results.count");
 		a=0;
@@ -184,23 +202,27 @@ selectWindow(postsyn);
 			pre=getResult("Area",p) + a;
 			a=pre;
 			}
-
+	 }
+	 else { pre=0;}
 	//Calculation of NF accumulation by making the ratio between NF volume and Bungarotoxin volume
-	Ratio=pre/post*100;
-	saveAs("Results", pathsave + "Results_Volume_"+presyn+"_junction" + j + ".xls");
+	if (pre>post) {Ratio = 100;}
+	else {Ratio=pre/post*100;}
+	saveAs("Results", pathjctn + "Results_Volume_"+presyn+"_junction" + j + ".csv");
 	run("Close");
 	selectWindow(postsyn);
 	run("Close");
-	selectWindow(presyn);
+	//selectWindow(presyn);
 	run("Close");
 
 	//Calculation of actual volume in Âµm^3 (Slices are acquired every 0.5Âµm)
 	prev=pre*zstep;
 	postv=post*zstep;
 	
-	//Results Display 
-	print("Junction ",j," : Presynaptic Volume (um^3) : ",prev, "Postsynaptic Volume (um^3) : ", postv,"Ratio Accu : ",Ratio);
-	run("Close All");
+	//Results Display
+	
+
+		print(jctn[i]," : Presynaptic Volume (um^3) : ",prev, "Postsynaptic Volume (um^3) : ", postv,"Ratio Accu : ",Ratio);
+		run("Close All");
 
 }
 	//Saving the final results of volumes and accumulation. 
@@ -210,7 +232,7 @@ selectWindow(postsyn);
 
 
 
-//FUNCTIONS 
+//FUNCTIONS -----------------------------------------------------------------------------------------
 
 function selectChannelandPix(TypeIm) {
 		
@@ -457,6 +479,22 @@ function extractChannel_RGB(chan_presyn,chan_postsyn) {
 			break; 
 			}
 
+}
+
+
+//---------------------------------------------------------------------------------
+
+function combineroi()
+{	
+n=roiManager("count");
+A=newArray(n);  
+for (i=0; i<A.length; i++)
+    { A[i] = i; }
+roiManager('select',A);   
+roiManager("Combine");
+roiManager("Add");
+roiManager('select',A);   
+roiManager("delete");
 }
 
 

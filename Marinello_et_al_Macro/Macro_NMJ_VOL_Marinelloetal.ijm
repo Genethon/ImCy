@@ -1,6 +1,8 @@
+requires("1.53f");
 //MAIN CODE
 // Choice of Image Type
 //Get Images Directory and number of junction folders
+
 
 Imdir=getDirectory("Image Junction Folder");
 jctn = getFileList(Imdir);
@@ -65,10 +67,9 @@ for (i = 0; i < Nbj ; i++)
 	else 
 		{	
 		ListImJcn=getFileList(Imdir+jctn[i]);	
-		Junction=Imdir+jctn[i]+ListImJcn[0];
-	
+		Junction=Imdir+jctn[i];
 		
-		run("Image Sequence...", "open=[Junction] sort");
+		run("Image Sequence...", "dir="+Junction+" sort");
 		run("Set Scale...", "distance=1 known="+xypix+" pixel=1 unit=um");
 		extractChannel_RGB(channel);
 		}
@@ -91,11 +92,13 @@ for (i = 0; i < Nbj ; i++)
 	selectWindow("stack");
 	
 	// Analyse of detected surfaces
-	run("Analyze Particles...", "size=20-Infinity pixel show=[Bare Outlines] display exclude stack");
+	run("Set Measurements...", "area mean redirect=None decimal=3");
+	run("Analyze Particles...", "size=200-Infinity pixel show=[Bare Outlines] display exclude stack");
 
 	//Saving the image of the segemented junction, and the results of detected surfaces per image
-	pathjctn=pathsave+"Junction"+j+"/";
+	pathjctn=pathsave+jctn[i]+"/";
 	File.makeDirectory(pathjctn);
+
 	
 	selectWindow("Drawing of stack");
 	saveAs("Tiff", pathjctn + "DrawingJunction" +j+".tif");
@@ -125,7 +128,7 @@ for (i = 0; i < Nbj ; i++)
 	run("Z Project...", "projection=[Max Intensity]");
 	selectWindow("MAX_stack1");
 	// Measurement of maximum projection surface area
-	run("Analyze Particles...", "size=20-Infinity pixel show=[Bare Outlines] display exclude");
+	run("Analyze Particles...", "size=200-Infinity pixel show=[Bare Outlines] display exclude");
 	// Saving maximum projection and results
 	selectWindow("MAX_stack1");
 	saveAs("Tiff", pathjctn + "Maxproj" +j+".tif");
@@ -140,7 +143,7 @@ for (i = 0; i < Nbj ; i++)
 		for(k=0; k<n; k=k+1)
  			{
 			endp=getResult("Area",k) + a;
-			a=post;
+			a=endp;
 			}
 
 	
@@ -164,7 +167,7 @@ for (i = 0; i < Nbj ; i++)
 	selectWindow("Maxproj"+j+".tif");
 	close();
 
-	print("Junction ",j," : PostSynaptic Volume (um^3) : ",voljunc, "Endplate Area (um^2) : ", endp,"Tortuosity : ",tort);
+	print(jctn[i]," : PostSynaptic Volume (um^3) : ",voljunc, "Endplate Area (um^2) : ", endp,"Tortuosity : ",tort);
 	run("Close All");
 
 	
