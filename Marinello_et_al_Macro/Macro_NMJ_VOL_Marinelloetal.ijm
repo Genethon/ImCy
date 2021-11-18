@@ -38,7 +38,8 @@ setBatchMode(true);
 for (i = 0; i < Nbj ; i++) 
 {
 	
-	// Open stack of the junction images according to the Image Type
+	// Open stack of the junction images 
+	// according to the Image Type
 		
 	if (TypeIm == "Nikkon nd2") 
 		{
