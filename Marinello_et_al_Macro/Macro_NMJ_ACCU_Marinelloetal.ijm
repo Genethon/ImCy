@@ -1,14 +1,14 @@
 requires("1.53f");
-//MAIN CODE
+// MAIN CODE
 // Choice of Image Type
-//Get Images Directory and number of junction folders
+// Get Images Directory and number of junction folders
 
 Imdir=getDirectory("Image Junction Folder");
 jctn = getFileList(Imdir);
 
 Nbj=lengthOf(jctn);
 
-//Define a saving directory
+// Define a saving directory
 pathsave=getDirectory("Saving Folder");
 
 types = newArray("Nikkon nd2","Leica lif or Zeiss czi","TIFF");
@@ -22,6 +22,8 @@ if (TypeIm=="Leica lif or Zeiss czi")
 	{
 		TypeIm="Leica lif";
 	}
+
+//Use of the functions (at the end of the code) for extracting pixel information from images or dialog boxes
 
 ChanPix=selectChannelandPix(TypeIm);
 
@@ -38,7 +40,8 @@ setBatchMode(true);
 
 for (i = 0; i < Nbj ; i++) 
 {
-	j=i+1;
+
+	// Open stack of the junction images according to the Image Type and extracting the presynaptic image stack (presyn) and the postsynaptic image stack (postsyn)
 	
 	if (TypeIm == "Nikkon nd2") 
 		{
@@ -81,11 +84,66 @@ for (i = 0; i < Nbj ; i++)
 
 
 //----------------------------------------------------------------------
+// Creating a directory for each junction
+	
+	pathjctn=pathsave+jctn[i];
+	File.makeDirectory(pathjctn);
+		
+		// Calculating the volume of the postsynaptic part of the junction 
+		
+			selectWindow(postsyn);
+			run("Duplicate...", "duplicate");
+			name2=postsyn+"-2";
+			rename(name2);
+			
+			selectWindow(postsyn);
+			Midslice=nSlices/2+1;
+			setSlice(Midslice);
+		
+			//Otsu Thresholding
+			setAutoThreshold("Otsu");
+			setOption("BlackBackground", false);
+			run("Convert to Mask", "method=Otsu background=Dark");
+			run("Invert","stack");
+			run("Dilate","stack");
+			// Analyzing surfaces	
+			run("Set Measurements...", "area stack display redirect=None decimal=3");
+			run("Analyze Particles...", "size=20-Infinity pixel show=Masks display exclude stack");
+					
+			// Summing all the surface area of detected surfaces = Volume of bungatoxin staining
 
-	selectWindow(postsyn);
+			//Error message in case the signal is not automatically detected
+			R=isOpen("Results");
+			if (R==0) 
+			{
+				print("PostSynaptic signal is too low to be processed automatically.");
+			}
+			else 
+			{
+				//Calculating presynaptic volume by summing all surfaces detected, and multiplying by zstep.
+				
+				n=getValue("results.count");
+				post=0;
+				for(k=0; k<n; k=k+1)
+		 			{
+					post=getResult("Area",k) + post;
+					}
+
+				//Saving the results
+					
+			selectWindow("Results");
+			saveAs("Results", pathjctn + File.separator + "Results_Volume_" + postsyn + "_" + jctn[i] + ".csv");
+			selectWindow("Results");
+			run("Close");
+
+//----------------------------------------------------
+	// Automatic CROP around the junction
+
+	// Detection of all the surfaces from the max projection and creation a combined ROI 
+	selectWindow(name2);
 	run("Z Project...", "projection=[Max Intensity]");
-	selectWindow("MAX_"+postsyn);
-	setAutoThreshold("Huang");
+	selectWindow("MAX_"+name2);
+	setAutoThreshold("Otsu");
 	setOption("BlackBackground", false);
 	run("Convert to Mask");
 	run("Invert");
@@ -93,128 +151,95 @@ for (i = 0; i < Nbj ; i++)
 	roiManager("reset");
 	run("Analyze Particles...", "size=2-1000 add");
 	combineroi();
-	selectWindow(postsyn);
-	roiManager("Select", 0);
+	
+	selectWindow(name2);
+	n=roiManager("count");
+	roiManager("Select", n-1);
 	run("Crop");
 	rename(postsyn);
-	run("Select None");
+
+	// Croping around the combined ROI for the postsynaptic stack and saving the stack
 	
-	roiManager("reset");
+	selectWindow("Mask of "+postsyn);
+	n=roiManager("count");
+	roiManager("Select", n-1);
+	run("Crop");
+	saveAs("Tiff", pathjctn + File.separator + "Drawing_" + postsyn + "_" +jctn[i]+".tif");
+	selectWindow("Drawing_"+postsyn+"_"+jctn[i]+".tif");
+	run("Close");
 
-
-	selectWindow("MAX_"+postsyn);
-	run("Select None");
-	run("Analyze Particles...", "size=2-1000  add");
-	combineroi();
+	// Croping around the combined ROI for the presynatic stack and saving the stack
+	
 	selectWindow(presyn);
-	roiManager("select", 0);
+	roiManager("select", n-1);
 	run("Crop");
 	rename(presyn);
 	run("Select None");
-
-	roiManager("reset");
-	selectWindow("MAX_"+postsyn);
-	run("Select None");
-	run("Analyze Particles...", "size=2-1000  add");
-	combineroi();
+	
 	selectWindow("stackMax");
 	run("Z Project...", "projection=[Max Intensity]");
 	selectWindow("MAX_stackMax");
-	roiManager("select", 0);
+	roiManager("select", n-1);
 	run("Crop");
-	
-	pathjctn=pathsave+jctn[i];
-	File.makeDirectory(pathjctn);
 
-	saveAs("Tiff", pathjctn + "Maxproj_crop_jonction"+j+".tif");
-	selectWindow("Maxproj_crop_jonction"+j+".tif");
+		
+	saveAs("Tiff", pathjctn + File.separator + "Maxproj_crop_"+jctn[i]+".tif");
+	selectWindow("Maxproj_crop_"+jctn[i]+".tif");
 	run("Close");
+	run("Clear Results");
 
-
-	// Positionning in the middle of bungarotoxin stack for thresholding
-	selectWindow(postsyn);
-	Midslice=nSlices/2+1;
-	setSlice(Midslice);
-
-	//Otsu Thresholding
-	setAutoThreshold("Otsu");
-	//getThreshold(lower,upper);
-	//up1=upper;
-	setOption("BlackBackground", false);
-	run("Convert to Mask", "method=Otsu background=Dark");
-	run("Invert","stack");
-	run("Dilate","stack");
-	//Analysis of detected surfaces
-	run("Set Measurements...", "area mean redirect=None decimal=3");
-	run("Analyze Particles...", "size=20-Infinity pixel show=[Bare Outlines] display exclude stack");
-	//Saving the detected surfaces contour
-	selectWindow("Drawing of "+postsyn);
-	saveAs("Tiff", pathjctn + "Drawing_" + postsyn + "_junction" +j+".tif");
-	selectWindow("Drawing_"+postsyn+"_junction"+j+".tif");
-	run("Close");
 	
-	// Summing all the surface area of detected surfaces = Volume of bungatoxin staining
-		n=getValue("results.count");
-		a=0;
-		post=0;
-		for(k=0; k<n; k=k+1)
- 			{
-			post=getResult("Area",k) + a;
-			a=post;
-			}
-	selectWindow("Results");
-	saveAs("Results", pathjctn + "Results_Volume_" + postsyn + "_junction" + j + ".csv");
-	selectWindow("Results");
-	run("Close");
-	
-	
-	// Positionning in the middle of NF stack for thresholding
+	// Positionning in the middle of presynaptic tack for thresholding
 	selectWindow(presyn);
 	setSlice(Midslice);
 
 	//Otsu Thresholding
+
 		setAutoThreshold("Otsu");
 		getThreshold(lower,upper);
-		T=maxOf(upper,15);
+		// Condition that avoid the Otsu threshold to threshold noise. If the signal is to weak, it is not processed. 
+		T=maxOf(upper,8);
 		setThreshold(0, T);
 		setOption("BlackBackground", false);
-		run("Convert to Mask","background=Light");
+		run("Convert to Mask", "method=Otsu background=Dark");
 		run("Invert","stack");
 		run("Dilate","stack");
+		
+		
 		//Analysis of detected surfaces
-		run("Analyze Particles...", "size=20-Infinity pixel show=[Bare Outlines] display exclude stack");
+		run("Analyze Particles...", "size=20-Infinity pixel show=Masks display exclude stack");
 		//Saving the detected surfaces contour
-		selectWindow("Drawing of "+presyn);
-		saveAs("Tiff", pathjctn + "Drawing_"+presyn+"_junction" +j+".tif");
-		selectWindow("Drawing_"+presyn+"_junction"+j+".tif");
+		selectWindow("Mask of "+presyn);
+		saveAs("Tiff", pathjctn + File.separator + "Drawing_"+presyn+"_" +jctn[i]+".tif");
+		selectWindow("Drawing_"+presyn+"_"+jctn[i]+".tif");
 		run("Close");
 	
-	// Summing all the surface area of detected surfaces = Volume of NF staining
+	// Summing all the surface area of detected surfaces = Volume of postsynaptic staining
 	Res=isOpen("Results");
 	if (Res==1) 
 	{
 	selectWindow("Results");
 		n=getValue("results.count");
-		a=0;
 		pre=0;
 		for(p=0; p<n; p=p+1)
  			{
-			pre=getResult("Area",p) + a;
-			a=pre;
+			pre=getResult("Area",p) + pre;
 			}
+			saveAs("Results", pathjctn + File.separator + "Results_Volume_"+presyn+"_" + jctn[i] + ".csv");
+			run("Close");
 	 }
 	 else { pre=0;}
-	//Calculation of NF accumulation by making the ratio between NF volume and Bungarotoxin volume
-	if (pre>post) {Ratio = 100;}
-	else {Ratio=pre/post*100;}
-	saveAs("Results", pathjctn + "Results_Volume_"+presyn+"_junction" + j + ".csv");
-	run("Close");
+	 
+	//Calculation of presynaptic accumulation by making the ratio between presynaptic volume and postsynaptic volume
+	
+	Ratio=pre/post*100;
+	
 	selectWindow(postsyn);
 	run("Close");
 	//selectWindow(presyn);
 	run("Close");
 
-	//Calculation of actual volume in Âµm^3 (Slices are acquired every 0.5Âµm)
+	//Calculation of actual volume in µm^3 
 	prev=pre*zstep;
 	postv=post*zstep;
 	
@@ -222,8 +247,9 @@ for (i = 0; i < Nbj ; i++)
 	
 
 		print(jctn[i]," : Presynaptic Volume (um^3) : ",prev, "Postsynaptic Volume (um^3) : ", postv,"Ratio Accu : ",Ratio);
+	}
 		run("Close All");
-
+	
 }
 	//Saving the final results of volumes and accumulation. 
 	selectWindow("Log");
@@ -233,6 +259,7 @@ for (i = 0; i < Nbj ; i++)
 
 
 //FUNCTIONS -----------------------------------------------------------------------------------------
+// Function to extract the channel in which the staining of interest is, and the size of the pixel. 
 
 function selectChannelandPix(TypeIm) {
 		
@@ -301,6 +328,8 @@ function selectChannelandPix(TypeIm) {
 
 
 //----------------------------------------------------------------------------------
+
+// Function to extract the correct channel of the images in .lif .czi or .nd2
 
 function extractChannel_bioFormat(chan_presyn,chan_postsyn) {
 	
@@ -419,7 +448,7 @@ getDimensions(width, height, chan, slices, frames);
 }
 
 //-----------------------------------------------------------------------------------
-
+// Function to extract the RGB channel of interest for Tiff Files
 
 function extractChannel_RGB(chan_presyn,chan_postsyn) {
 
@@ -483,6 +512,7 @@ function extractChannel_RGB(chan_presyn,chan_postsyn) {
 
 
 //---------------------------------------------------------------------------------
+//Function that combine different ROI into a ROI that is a logical OR of the initial ROIS
 
 function combineroi()
 {	
@@ -495,8 +525,11 @@ roiManager("Combine");
 roiManager("Add");
 roiManager('select',A);   
 roiManager("delete");
+roiManager("select", 0);
+getBoundingRect(x, y, width, height);
+makeRectangle(x-15, y-15, width+30, height+30);
+roiManager("add");
 }
-
 
 //-----------------------------------------------------------------------------------
 

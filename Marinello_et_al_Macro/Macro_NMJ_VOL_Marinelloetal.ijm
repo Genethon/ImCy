@@ -1,5 +1,6 @@
 requires("1.53f");
 //MAIN CODE
+
 // Choice of Image Type
 //Get Images Directory and number of junction folders
 
@@ -24,7 +25,7 @@ TypeIm=Dialog.getChoice();
 		TypeIm="Leica lif";
 	}
 
-	
+//Use of the functions (at the end of the code) for extracting pixel information from images or dialog boxes
 	
 ChanPix=selectChannelandPix(TypeIm);
 channel=ChanPix[0];
@@ -37,10 +38,8 @@ setBatchMode(true);
 for (i = 0; i < Nbj ; i++) 
 {
 	
-	// Open stack of the junction images
-	j=i+1;
-	
-	
+	// Open stack of the junction images according to the Image Type
+		
 	if (TypeIm == "Nikkon nd2") 
 		{
 		ListImJcn=getFileList(Imdir);
@@ -75,6 +74,7 @@ for (i = 0; i < Nbj ; i++)
 		}
 		
 	//-----------------------------
+	//Quantification of BTX staining Volume
 	
 	//Positionning in the middle of the stack for correct thresholding
 	selectWindow("stack");
@@ -93,20 +93,21 @@ for (i = 0; i < Nbj ; i++)
 	
 	// Analyse of detected surfaces
 	run("Set Measurements...", "area mean redirect=None decimal=3");
-	run("Analyze Particles...", "size=200-Infinity pixel show=[Bare Outlines] display exclude stack");
+	run("Analyze Particles...", "size=20-Infinity pixel show=Masks display exclude stack");
 
-	//Saving the image of the segemented junction, and the results of detected surfaces per image
+
 	pathjctn=pathsave+jctn[i]+"/";
 	File.makeDirectory(pathjctn);
 
-	
-	selectWindow("Drawing of stack");
-	saveAs("Tiff", pathjctn + "DrawingJunction" +j+".tif");
-	selectWindow("DrawingJunction"+j+".tif");
+	//Saving the image of the segemented junction
+
+	selectWindow("Mask of stack");
+	saveAs("Tiff", pathjctn + "Drawing" +jctn[i]+".tif");
+	selectWindow("Drawing"+jctn[i]+".tif");
 	close();
 	selectWindow("Results");
 
-		//Calcul du Volume de la jonction
+		//Calculating junction volume by summing all surfaces detected, and multiplying by zstep.
 		
 		n=getValue("results.count");
 		a=0;
@@ -118,24 +119,30 @@ for (i = 0; i < Nbj ; i++)
 			}
 
 		voljunc=post*zstep;
+
+	//Saving the results
 	
 	selectWindow("Results");
-	saveAs("Results", pathjctn + "Results_Volume_Junction" + j + ".csv");
+	saveAs("Results", pathjctn + "Results_Volume_" + jctn[i] + ".csv");
 	run("Close");
 	
 	// Calculation of Z maximum projection
 	selectWindow("stack1");
 	run("Z Project...", "projection=[Max Intensity]");
 	selectWindow("MAX_stack1");
+	
 	// Measurement of maximum projection surface area
 	run("Analyze Particles...", "size=200-Infinity pixel show=[Bare Outlines] display exclude");
+	
 	// Saving maximum projection and results
 	selectWindow("MAX_stack1");
-	saveAs("Tiff", pathjctn + "Maxproj" +j+".tif");
+	saveAs("Tiff", pathjctn + "Maxproj" +jctn[i]+".tif");
 	selectWindow("Drawing of MAX_stack1");
-	saveAs("Tiff", pathjctn + "Drawing_Maxproj" +j+".tif");
+	saveAs("Tiff", pathjctn + "Drawing_Maxproj" +jctn[i]+".tif");
 	run("Close");
 	selectWindow("Results");
+
+	// Calculating the endplate surface area by summing the surface of all detected elements in the max projection of  staining. 
 	
 	n=getValue("results.count");
 		a=0;
@@ -146,39 +153,41 @@ for (i = 0; i < Nbj ; i++)
 			a=endp;
 			}
 
-	
+	// Saving the results
 	selectWindow("Results");
-	saveAs("Results", pathjctn + "Results_MIPsurface_Junction" + j + ".csv");
+	saveAs("Results", pathjctn + "Results_MIPsurface_" + jctn[i] + ".csv");
 	run("Close");
 	selectWindow("stack1");
 	close();
 
 	// Calculation of Tortuosity and saving tortuosity results
-	selectWindow("Maxproj"+j+".tif");
-	run("Tortuosity", "mask=[Maxproj"+j+".tif] distances=[Borgefors (3,4)] sub-sampling=1");
-	selectWindow("Maxproj"+j+"-tortuosity");
+	selectWindow("Maxproj"+jctn[i]+".tif");
+	run("Tortuosity", "mask=[Maxproj"+jctn[i]+".tif] distances=[Borgefors (3,4)] sub-sampling=1");
+	selectWindow("Maxproj"+jctn[i]+"-tortuosity");
 	
 	tort=getResult("Tortuosity", 0);
 	
-	saveAs("Results",pathjctn + "Results_Tortuosity_Junction" + j + ".csv");
+	saveAs("Results",pathjctn + "Results_Tortuosity_" + jctn[i] + ".csv");
 	run("Close");
 	selectWindow("stack");
 	close();
-	selectWindow("Maxproj"+j+".tif");
+	selectWindow("Maxproj"+jctn[i]+".tif");
 	close();
 
+	// Display the results for each junction 
 	print(jctn[i]," : PostSynaptic Volume (um^3) : ",voljunc, "Endplate Area (um^2) : ", endp,"Tortuosity : ",tort);
 	run("Close All");
 
 	
 }
 
-
+	// Saving the displayed log window. 
 	selectWindow("Log");
 	saveAs("Text",pathsave+"Log_analysis.csv");
 
 //FUNCTIONS 
 
+// Function to extract the channel in which the staining of interest is, and the size of the pixel. 
 function selectChannelandPix(TypeIm) {
 		
 		
@@ -186,7 +195,7 @@ function selectChannelandPix(TypeIm) {
 			{
 				Dialog.create("Channel");
 			Dialog.addMessage("Select the channel corresponding to staining of interest");
-			Dialog.addString("C1 ; C2 ; C3","C1");
+			Dialog.addString("C1 ; C2 ; C3","C2");
 			Dialog.show();
 				channel=Dialog.getString();
 				xypix=0;
@@ -197,7 +206,7 @@ function selectChannelandPix(TypeIm) {
 			{
 				Dialog.create("Channel");
 			Dialog.addMessage("Select the channel corresponding to staining of interest");
-			Dialog.addString("C1 ; C2 ; C3","C1");
+			Dialog.addString("C1 ; C2 ; C3","C2");
 			Dialog.show();
 				channel=Dialog.getString();	
 				xypix=0;
@@ -226,6 +235,8 @@ function selectChannelandPix(TypeIm) {
 
 
 //----------------------------------------------------------------------------------
+
+// Function to extract the correct channel of the images in .lif .czi or .nd2
 
 function extractChannel_bioFormat(channel) {
 	
@@ -365,6 +376,7 @@ getDimensions(width, height, chan, slices, frames);
 
 //-----------------------------------------------------------------------------------
 
+// Function to extract the RGB channel of interest for Tiff Files
 
 function extractChannel_RGB(channel) {
 		
